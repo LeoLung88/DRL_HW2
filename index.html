@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cliff Walking RL Demo | Q-learning vs SARSA</title>
+  <meta name="description" content="互動式強化學習展示：在 Cliff Walking 環境中比較 Q-learning 與 SARSA 演算法的差異。" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22273a;
+      --border: #2e3347;
+      --accent-q: #4f8ef7;
+      --accent-s: #f76f6f;
+      --accent-green: #4ade80;
+      --accent-yellow: #fbbf24;
+      --text: #e2e8f0;
+      --text-muted: #8892a4;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      background: linear-gradient(135deg, #1a1d27 0%, #12172b 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 24px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header .logo { font-size: 2rem; }
+    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    header p { font-size: 0.85rem; color: var(--text-muted); margin-top: 2px; }
+    .main-layout {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      min-height: calc(100vh - 85px);
+    }
+    /* Sidebar */
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .sidebar h2 { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+    .param-group { display: flex; flex-direction: column; gap: 16px; }
+    .param-item label { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 500; margin-bottom: 8px; }
+    .param-item label span { color: var(--accent-q); font-weight: 600; }
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-q);
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+    .train-btn {
+      padding: 14px;
+      border-radius: var(--radius);
+      border: none;
+      background: linear-gradient(135deg, #4f8ef7, #7c5bf7);
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+    .train-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    .train-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .progress-wrap { display: flex; flex-direction: column; gap: 8px; }
+    .progress-label { font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; }
+    .progress-bar-outer { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+    .progress-bar-inner { height: 100%; border-radius: 3px; width: 0%; transition: width 0.1s linear; }
+    .bar-q { background: var(--accent-q); }
+    .bar-s { background: var(--accent-s); }
+    /* Main Content */
+    .content { padding: 28px 32px; display: flex; flex-direction: column; gap: 28px; overflow-y: auto; }
+    .section-title {
+      font-size: 0.75rem; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    /* Stats Row */
+    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .stat-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
+    .stat-value { font-size: 1.6rem; font-weight: 700; }
+    .stat-sub { font-size: 0.75rem; color: var(--text-muted); }
+    .blue { color: var(--accent-q); }
+    .red { color: var(--accent-s); }
+    /* Chart */
+    .chart-wrapper { position: relative; height: 280px; }
+    /* Grid */
+    .grids-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-section h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; }
+    .grid-table { border-collapse: collapse; width: 100%; }
+    .grid-table td {
+      width: 8.33%;
+      aspect-ratio: 1;
+      text-align: center;
+      font-size: 1.2rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    .cell-empty { background: var(--surface2); }
+    .cell-cliff { background: #1e1010; }
+    .cell-path  { background: #101e2a; }
+    .cell-start { background: #1a2a1a; }
+    .cell-goal  { background: #2a1a1a; }
+    .pill {
+      display: inline-block; padding: 3px 10px; border-radius: 20px;
+      font-size: 0.75rem; font-weight: 600;
+    }
+    .pill-q { background: rgba(79,142,247,0.15); color: var(--accent-q); border: 1px solid rgba(79,142,247,0.3); }
+    .pill-s { background: rgba(247,111,111,0.15); color: var(--accent-s); border: 1px solid rgba(247,111,111,0.3); }
+    .placeholder-msg {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 200px; color: var(--text-muted); gap: 8px;
+    }
+    .placeholder-msg .icon { font-size: 2.5rem; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">🏃</div>
+  <div>
+    <h1>Cliff Walking RL Demo</h1>
+    <p>Q-learning (Off-policy) vs SARSA (On-policy) — 純瀏覽器端執行，無需伺服器</p>
+  </div>
+</header>
+
+<div class="main-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div>
+      <h2>⚙️ 參數設定</h2>
+    </div>
+    <div class="param-group">
+      <div class="param-item">
+        <label>訓練回合數 (Episodes) <span id="lbl-ep">500</span></label>
+        <input type="range" id="sl-ep" min="100" max="2000" step="100" value="500" oninput="document.getElementById('lbl-ep').textContent=this.value" />
+      </div>
+      <div class="param-item">
+        <label>學習率 α (Alpha) <span id="lbl-alpha">0.10</span></label>
+        <input type="range" id="sl-alpha" min="0.01" max="1.0" step="0.01" value="0.10" oninput="document.getElementById('lbl-alpha').textContent=parseFloat(this.value).toFixed(2)" />
+      </div>
+      <div class="param-item">
+        <label>折扣因子 γ (Gamma) <span id="lbl-gamma">0.90</span></label>
+        <input type="range" id="sl-gamma" min="0.1" max="1.0" step="0.01" value="0.90" oninput="document.getElementById('lbl-gamma').textContent=parseFloat(this.value).toFixed(2)" />
+      </div>
+      <div class="param-item">
+        <label>探索率 ε (Epsilon) <span id="lbl-eps">0.10</span></label>
+        <input type="range" id="sl-eps" min="0.01" max="1.0" step="0.01" value="0.10" oninput="document.getElementById('lbl-eps').textContent=parseFloat(this.value).toFixed(2)" />
+      </div>
+    </div>
+
+    <div class="progress-wrap" id="progress-section" style="display:none;">
+      <div class="progress-label"><span>Q-learning</span><span id="pct-q">0%</span></div>
+      <div class="progress-bar-outer"><div class="progress-bar-inner bar-q" id="pbar-q"></div></div>
+      <div class="progress-label"><span>SARSA</span><span id="pct-s">0%</span></div>
+      <div class="progress-bar-outer"><div class="progress-bar-inner bar-s" id="pbar-s"></div></div>
+    </div>
+
+    <button class="train-btn" id="train-btn" onclick="runTraining()">🚀 開始訓練</button>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="content">
+    <!-- Stats -->
+    <div>
+      <div class="section-title">📊 統計摘要</div>
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Q-learning 最後50回合均值</div>
+          <div class="stat-value blue" id="stat-q-avg">—</div>
+          <div class="stat-sub">累積獎勵</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">SARSA 最後50回合均值</div>
+          <div class="stat-value red" id="stat-s-avg">—</div>
+          <div class="stat-sub">累積獎勵</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Q-learning 最終路徑長度</div>
+          <div class="stat-value blue" id="stat-q-len">—</div>
+          <div class="stat-sub">步數</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">SARSA 最終路徑長度</div>
+          <div class="stat-value red" id="stat-s-len">—</div>
+          <div class="stat-sub">步數</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="card">
+      <div class="section-title">📈 學習曲線比較（平滑化）</div>
+      <div id="chart-wrapper" style="position:relative; height:200px;">
+        <div id="chart-placeholder" class="placeholder-msg" style="height:100%;">
+          <div class="icon">📉</div>
+          <div>設定參數並點擊「開始訓練」以顯示學習曲線</div>
+        </div>
+        <canvas id="rewardChart" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%;"></canvas>
+      </div>
+    </div>
+
+
+    <!-- Grid Paths -->
+    <div class="card">
+      <div class="section-title">🗺️ 最終學習路徑（ε = 0 貪婪測試）</div>
+      <div class="grids-row">
+        <div class="grid-section">
+          <h3><span class="pill pill-q">Q-learning</span> Off-policy — 最短但冒險</h3>
+          <div id="grid-q"><div class="placeholder-msg"><div class="icon">🟦</div><div>訓練後顯示</div></div></div>
+        </div>
+        <div class="grid-section">
+          <h3><span class="pill pill-s">SARSA</span> On-policy — 較長但安全</h3>
+          <div id="grid-s"><div class="placeholder-msg"><div class="icon">🟥</div><div>訓練後顯示</div></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ──────────────────────────────────────────────
+// 環境
+// ──────────────────────────────────────────────
+class CliffWalkingEnv {
+  constructor() {
+    this.rows = 4; this.cols = 12;
+    this.start = [3, 0]; this.goal = [3, 11];
+    this.state = [...this.start];
+  }
+  reset() { this.state = [...this.start]; return this.state; }
+  step(action) {
+    let [x, y] = this.state;
+    if (action === 0) x = Math.max(0, x - 1);
+    else if (action === 1) x = Math.min(this.rows - 1, x + 1);
+    else if (action === 2) y = Math.max(0, y - 1);
+    else if (action === 3) y = Math.min(this.cols - 1, y + 1);
+    this.state = [x, y];
+    if (x === 3 && y >= 1 && y <= 10) {
+      this.state = [...this.start];
+      return { state: this.state, reward: -100, done: false };
+    }
+    if (x === 3 && y === 11) return { state: this.state, reward: -1, done: true };
+    return { state: this.state, reward: -1, done: false };
+  }
+}
+
+// ──────────────────────────────────────────────
+// 工具：seeded 隨機
+// ──────────────────────────────────────────────
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// ──────────────────────────────────────────────
+// Agent
+// ──────────────────────────────────────────────
+class Agent {
+  constructor(rows, cols, numActions, alpha, gamma, epsilon, rng) {
+    this.na = numActions; this.alpha = alpha; this.gamma = gamma;
+    this.epsilon = epsilon; this.rng = rng;
+    this.Q = Array.from({length: rows}, () =>
+      Array.from({length: cols}, () => new Float64Array(numActions)));
+  }
+  chooseAction(state) {
+    const [x, y] = state;
+    if (this.rng() < this.epsilon) return Math.floor(this.rng() * this.na);
+    const q = this.Q[x][y];
+    let maxQ = -Infinity, best = [0];
+    for (let a = 0; a < this.na; a++) {
+      if (q[a] > maxQ) { maxQ = q[a]; best = [a]; }
+      else if (q[a] === maxQ) best.push(a);
+    }
+    return best[Math.floor(this.rng() * best.length)];
+  }
+  maxQ(state) { const [x,y]=state; return Math.max(...this.Q[x][y]); }
+}
+
+// ──────────────────────────────────────────────
+// 訓練函數
+// ──────────────────────────────────────────────
+function trainQLearning(env, episodes, alpha, gamma, epsilon, rng) {
+  const agent = new Agent(env.rows, env.cols, 4, alpha, gamma, epsilon, rng);
+  const rewards = [];
+  for (let ep = 0; ep < episodes; ep++) {
+    let state = env.reset(), done = false, total = 0;
+    while (!done) {
+      const action = agent.chooseAction(state);
+      const {state: ns, reward, done: d} = env.step(action);
+      const [x,y]=state, [nx,ny]=ns;
+      const bestNext = agent.maxQ(ns);
+      agent.Q[x][y][action] += alpha * (reward + gamma * bestNext - agent.Q[x][y][action]);
+      state = ns; done = d; total += reward;
+    }
+    rewards.push(total);
+  }
+  return {agent, rewards};
+}
+
+function trainSARSA(env, episodes, alpha, gamma, epsilon, rng) {
+  const agent = new Agent(env.rows, env.cols, 4, alpha, gamma, epsilon, rng);
+  const rewards = [];
+  for (let ep = 0; ep < episodes; ep++) {
+    let state = env.reset(), done = false, total = 0;
+    let action = agent.chooseAction(state);
+    while (!done) {
+      const {state: ns, reward, done: d} = env.step(action);
+      const na = agent.chooseAction(ns);
+      const [x,y]=state, [nx,ny]=ns;
+      agent.Q[x][y][action] += alpha * (reward + gamma * agent.Q[nx][ny][na] - agent.Q[x][y][action]);
+      state = ns; action = na; done = d; total += reward;
+    }
+    rewards.push(total);
+  }
+  return {agent, rewards};
+}
+
+function smooth(arr, w=20) {
+  return arr.map((_, i) => {
+    const s = Math.max(0, i - w);
+    const slice = arr.slice(s, i+1);
+    return slice.reduce((a,b)=>a+b,0) / slice.length;
+  });
+}
+
+function getPath(agent, env) {
+  const path = [];
+  let state = env.reset(), done = false;
+  const origEps = agent.epsilon;
+  agent.epsilon = 0;
+  path.push([...state]);
+  let steps = 0;
+  while (!done && steps < 100) {
+    const action = agent.chooseAction(state);
+    const {state: ns, done: d} = env.step(action);
+    state = ns; done = d;
+    path.push([...state]);
+    steps++;
+  }
+  agent.epsilon = origEps;
+  return path;
+}
+
+// ──────────────────────────────────────────────
+// UI Rendering
+// ──────────────────────────────────────────────
+let chartInstance = null;
+
+function renderChart(qSmooth, sSmooth, episodes) {
+  const labels = Array.from({length: episodes}, (_, i) => i+1);
+
+  // ── 動態計算 Y 軸範圍 ──────────────────────────────────────────
+  // 所有獎勵皆為負值；最大值鎖定 0（無法超過），最小值往下留 10% 空間
+  const allVals = [...qSmooth, ...sSmooth];
+  const dataMin = Math.min(...allVals);
+  const dataMax = Math.max(...allVals); // 通常 < 0
+
+  // 選一個「乾淨」的步距（10 的倍數），讓刻度好看
+  const rawRange = Math.abs(dataMin) * 1.10;  // 10% 底部 padding
+  const step = Math.pow(10, Math.floor(Math.log10(rawRange / 5)));
+  const niceStep = Math.ceil((rawRange / 5) / step) * step;
+  const yMin = -Math.ceil(Math.abs(dataMin) * 1.10 / niceStep) * niceStep;
+  const yMax = Math.min(0, Math.ceil(dataMax / niceStep) * niceStep + niceStep);
+
+  // ── 顯示圖表容器 ─────────────────────────────────────────────
+  const wrapper = document.getElementById('chart-wrapper');
+  const placeholder = document.getElementById('chart-placeholder');
+  const canvas = document.getElementById('rewardChart');
+  placeholder.style.display = 'none';
+  wrapper.style.height = '300px';   // 固定容器高度，避免被撐開
+  canvas.style.display = 'block';
+
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Q-learning (Smoothed)',
+          data: qSmooth,
+          borderColor: '#4f8ef7',
+          backgroundColor: 'rgba(79,142,247,0.08)',
+          borderWidth: 2, pointRadius: 0, tension: 0.4, fill: true
+        },
+        {
+          label: 'SARSA (Smoothed)',
+          data: sSmooth,
+          borderColor: '#f76f6f',
+          backgroundColor: 'rgba(247,111,111,0.08)',
+          borderWidth: 2, pointRadius: 0, tension: 0.4, fill: true
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 800, easing: 'easeInOutQuart' },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: { color: '#e2e8f0', font: { family: 'Inter', size: 12 }, usePointStyle: true }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}`
+          },
+          backgroundColor: '#1a1d27',
+          borderColor: '#2e3347',
+          borderWidth: 1,
+          titleColor: '#e2e8f0',
+          bodyColor: '#8892a4'
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#8892a4', maxTicksLimit: 12, font: { size: 11 } },
+          grid: { color: '#1e2235' },
+          title: { display: true, text: 'Episode', color: '#8892a4', font: { size: 12 } }
+        },
+        y: {
+          min: yMin,
+          max: yMax,
+          ticks: {
+            color: '#8892a4',
+            stepSize: niceStep,
+            font: { size: 11 },
+            callback: v => v.toLocaleString()
+          },
+          grid: { color: '#1e2235' },
+          title: { display: true, text: 'Total Reward per Episode', color: '#8892a4', font: { size: 12 } }
+        }
+      }
+    }
+  });
+}
+
+function renderGrid(path, containerId) {
+  const env = new CliffWalkingEnv();
+  const pathSet = new Set(path.map(p => p[0]+','+p[1]));
+  let html = '<table class="grid-table">';
+  for (let r = 0; r < env.rows; r++) {
+    html += '<tr>';
+    for (let c = 0; c < env.cols; c++) {
+      const key = r+','+c;
+      let cls, emoji;
+      if (r===3 && c===0)   { cls='cell-start'; emoji='🏁'; }
+      else if (r===3 && c===11) { cls='cell-goal'; emoji='🏆'; }
+      else if (r===3 && c>=1 && c<=10) { cls='cell-cliff'; emoji='🌊'; }
+      else if (pathSet.has(key)) { cls='cell-path'; emoji='🐾'; }
+      else { cls='cell-empty'; emoji='⬜'; }
+      html += `<td class="${cls}">${emoji}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</table>';
+  document.getElementById(containerId).innerHTML = html;
+}
+
+function avg(arr, n=50) {
+  const s = arr.slice(-n);
+  return (s.reduce((a,b)=>a+b,0)/s.length).toFixed(2);
+}
+
+function setProgress(id, pctId, pct) {
+  document.getElementById(id).style.width = pct+'%';
+  document.getElementById(pctId).textContent = pct+'%';
+}
+
+async function runTraining() {
+  const episodes = parseInt(document.getElementById('sl-ep').value);
+  const alpha    = parseFloat(document.getElementById('sl-alpha').value);
+  const gamma    = parseFloat(document.getElementById('sl-gamma').value);
+  const epsilon  = parseFloat(document.getElementById('sl-eps').value);
+
+  const btn = document.getElementById('train-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 訓練中...';
+  document.getElementById('progress-section').style.display = 'flex';
+  document.getElementById('progress-section').style.flexDirection = 'column';
+
+  // 隱藏圖表區（確保訓練期間不顯示空圖）
+  const wrapper = document.getElementById('chart-wrapper');
+  const canvas  = document.getElementById('rewardChart');
+  wrapper.style.height = '200px';
+  canvas.style.display = 'none';
+  document.getElementById('chart-placeholder').style.display = 'flex';
+  document.getElementById('chart-placeholder').textContent = '⏳ 訓練中，請稍候...';
+
+  // 讓瀏覽器先 repaint 以顯示進度條
+  await new Promise(r => setTimeout(r, 50));
+  setProgress('pbar-q', 'pct-q', 10);
+
+  // ── 訓練（同步，完成後才繼續）──
+  const rngQ = mulberry32(42);
+  const rngS = mulberry32(42);
+
+  const envQ = new CliffWalkingEnv();
+  const {agent: qAgent, rewards: qRewards} = trainQLearning(envQ, episodes, alpha, gamma, epsilon, rngQ);
+  setProgress('pbar-q', 'pct-q', 100);
+  await new Promise(r => setTimeout(r, 30));
+
+  const envS = new CliffWalkingEnv();
+  const {agent: sAgent, rewards: sRewards} = trainSARSA(envS, episodes, alpha, gamma, epsilon, rngS);
+  setProgress('pbar-s', 'pct-s', 100);
+  await new Promise(r => setTimeout(r, 30));
+
+  // ── 訓練完畢，一次性更新所有 UI ──
+  document.getElementById('stat-q-avg').textContent = avg(qRewards);
+  document.getElementById('stat-s-avg').textContent = avg(sRewards);
+
+  const qPath = getPath(qAgent, new CliffWalkingEnv());
+  const sPath = getPath(sAgent, new CliffWalkingEnv());
+  document.getElementById('stat-q-len').textContent = (qPath.length - 1) + ' 步';
+  document.getElementById('stat-s-len').textContent = (sPath.length - 1) + ' 步';
+
+  // 圖表最後渲染（此時容器已穩定）
+  renderChart(smooth(qRewards), smooth(sRewards), episodes);
+  renderGrid(qPath, 'grid-q');
+  renderGrid(sPath, 'grid-s');
+
+  btn.disabled = false;
+  btn.textContent = '🔄 重新訓練';
+}
+</script>
+</body>
+</html>
