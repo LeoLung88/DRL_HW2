@@ -1,6 +1,6 @@
 # 🏃 Cliff Walking RL Demo — Q-learning vs SARSA
 
-> **🌐 Live Demo (GitHub Pages):** [https://drlhw3-leolung88.streamlit.app/streamlit_app3](https://drlhw3-leolung88.streamlit.app/streamlit_app3)/
+> **🌐 Live Demo (GitHub Pages):** [https://leolung88.github.io/DRL_HW2/](https://leolung88.github.io/DRL_HW2/)/
 
 本專案為深度強化學習課程作業，在經典的 **Cliff Walking（懸崖行走）** 環境中實作並比較兩種表格型強化學習演算法：
 - **Q-learning**（Off-policy，離策略）
